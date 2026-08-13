@@ -4,7 +4,11 @@ export type WorkoutLog = { id: string; date: string; workoutId: string; complete
 export type DayNutrition = { date: string; completedMeals: string[]; calories: number; protein: number; water: number; selectedMeals?: Record<string,string> }
 export type Measurement = { date: string; weight: number; waist?: number; bodyFat?: number }
 export type ReminderSettings = { enabled: boolean; water: boolean; meals: boolean; gym: boolean; gymTime: string; waterIntervalMinutes: number }
-export type Store = { workouts: WorkoutLog[]; nutrition: DayNutrition[]; measurements: Measurement[]; reminders?: ReminderSettings; lastBackup?: string }
+export type ImportedExercise = { id:string; name:string; sets:number; minReps:number; maxReps:number; rest:number; cue:string; increment:number; startingWeight?:number }
+export type ImportedWorkout = { id:string; day:number; title:string; focus:string; tone:'green'|'blue'; exercises:ImportedExercise[] }
+export type ImportedMeal = { id:string; time:string; name:string; detail:string; calories:number; protein:number }
+export type ActivePlan = { schemaVersion:'fittrack-plan-v1'; planId:string; name:string; startDate:string; endDate:string; dietaryConstraints:string[]; workouts:ImportedWorkout[]; mealsByDay:Record<string,ImportedMeal[]>; activatedAt?:string }
+export type Store = { workouts: WorkoutLog[]; nutrition: DayNutrition[]; measurements: Measurement[]; reminders?: ReminderSettings; activePlan?: ActivePlan; lastBackup?: string }
 
 const KEY = 'fittrack-personal-v1'
 export const emptyStore: Store = {

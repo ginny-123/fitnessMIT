@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { dayNames, mealLibrary, mealsByDay, workouts, type Exercise, type Workout } from './data'
 import { downloadBackup, emptyStore, loadStore, saveStore, type ExerciseLog, type Store, type WorkoutLog } from './storage'
+import CoachReview from './CoachReview'
+import PlanImporter from './PlanImporter'
+import ActivePlanView from './ActivePlanView'
 
 type View = 'today'|'workout'|'nutrition'|'progress'|'plan'|'settings'
 const icons: Record<View,string> = {today:'⌂',workout:'◆',nutrition:'●',progress:'↗',plan:'▤',settings:'⚙'}
@@ -18,11 +21,15 @@ function App(){
   useReminders(store)
   useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)}},[toast])
   const selectedDate=new Date(`${date}T12:00:00`), day=selectedDate.getDay()
-  const workout=workouts.find(w=>w.day===day)
-  const plannedMeals=mealsByDay[day]
+  const activeWorkouts=(store.activePlan?.workouts||workouts) as Workout[]
+  const activeMealsByDay=(store.activePlan?.mealsByDay||mealsByDay) as Record<number,typeof mealsByDay[0]>
+  for(const meal of Object.values(activeMealsByDay).flat())if(!mealLibrary.some(existing=>existing.name===meal.name))mealLibrary.push(meal)
+  const activeMealLibrary=Array.from(new Map([...mealLibrary,...Object.values(activeMealsByDay).flat()].map(meal=>[meal.name,meal])).values())
+  const workout=activeWorkouts.find(w=>w.day===day)
+  const plannedMeals=activeMealsByDay[day]
   const nutrition=store.nutrition.find(n=>n.date===date)
   const meals=plannedMeals.map(slot=>{
-    const chosen=mealLibrary.find(m=>m.name===nutrition?.selectedMeals?.[slot.id])
+    const chosen=activeMealLibrary.find(m=>m.name===nutrition?.selectedMeals?.[slot.id])
     return chosen?{...chosen,id:slot.id,time:slot.time}:slot
   })
   const completedMeals=nutrition?.completedMeals||[]
@@ -44,7 +51,7 @@ function App(){
     const current=s.nutrition.find(n=>n.date===date)||{date,completedMeals:[],calories:0,protein:0,water:0}
     const selectedMeals={...(current.selectedMeals||{}),[slotId]:mealName}
     const resolved=plannedMeals.map(slot=>{
-      const chosen=mealLibrary.find(m=>m.name===selectedMeals[slot.id])
+      const chosen=activeMealLibrary.find(m=>m.name===selectedMeals[slot.id])
       return chosen?{...chosen,id:slot.id,time:slot.time}:slot
     })
     const total=resolved.filter(m=>current.completedMeals.includes(m.id)).reduce((a,m)=>({c:a.c+m.calories,p:a.p+m.protein}),{c:0,p:0})
@@ -63,8 +70,8 @@ function App(){
       {view==='today'&&<Today date={date} day={day} workout={workout} meals={meals} consumed={consumed} mealTotals={mealTotals} water={nutrition?.water||0} onWorkout={openWorkout} onMeal={toggleMeal} completedMeals={completedMeals} onWater={updateWater}/>} 
       {view==='workout'&&<WorkoutView date={date} workout={activeWorkout||workout||workouts[0]} store={store} setStore={setStore} onDone={()=>{setToast('Workout saved');setView('today');setActiveWorkout(null)}}/>}
       {view==='nutrition'&&<Nutrition date={date} meals={meals} completed={completedMeals} onMeal={toggleMeal} onChooseMeal={chooseMeal} consumed={consumed} total={mealTotals} water={nutrition?.water||0} onWater={updateWater}/>} 
-      {view==='progress'&&<Progress store={store}/>} 
-      {view==='plan'&&<Plan/>}
+      {view==='progress'&&<><Progress store={store}/><div className="page coach-page"><CoachReview store={store} activeWorkouts={activeWorkouts}/></div></>} 
+      {view==='plan'&&<>{store.activePlan?<ActivePlanView plan={store.activePlan} workouts={activeWorkouts}/>:<Plan/>}<div className="page importer-page"><PlanImporter store={store} setStore={setStore} currentWorkouts={activeWorkouts} toast={setToast}/></div></>} 
       {view==='settings'&&<><div className="page reminder-page"><ReminderPanel store={store} setStore={setStore} toast={setToast}/></div><Settings store={store} setStore={setStore} toast={setToast}/></>} 
     </main>
     <div className="bottom-nav">{(['today','workout','nutrition','progress','plan','settings'] as View[]).map(v=><button key={v} className={view===v?'active':''} onClick={()=>nav(v)}><span>{icons[v]}</span><small>{labels[v]}</small></button>)}</div>

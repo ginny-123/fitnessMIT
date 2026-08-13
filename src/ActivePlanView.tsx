@@ -1,0 +1,5 @@
+import { useState } from 'react'
+import { dayNames, type Workout } from './data'
+import type { ActivePlan } from './storage'
+
+export default function ActivePlanView({plan,workouts}:{plan:ActivePlan;workouts:Workout[]}){const [open,setOpen]=useState(workouts[0]?.id||'');return <div className="page"><section className="plan-hero"><div><span className="eyebrow">ACTIVE IMPORTED BLOCK</span><h2>{plan.name}</h2><p>{plan.startDate} to {plan.endDate} · validated and locally activated</p></div><div className="plan-tags"><span>{workouts.length} days/week</span><span>Versioned JSON</span></div></section><div className="plan-list imported-plan-list">{workouts.map(w=><section className={`plan-day ${w.tone}`} key={w.id}><button className="plan-day-head" onClick={()=>setOpen(open===w.id?'':w.id)}><span><small>{dayNames[w.day]}</small><b>{w.title}</b><em>{w.focus}</em></span><strong>{w.exercises.length} exercises {open===w.id?'−':'+'}</strong></button>{open===w.id&&<div className="plan-exercises">{w.exercises.map((e,i)=><div key={e.id}><span>{i+1}</span><b>{e.name}</b><small>{e.sets} × {e.minReps}–{e.maxReps}</small><em>{e.cue}</em></div>)}</div>}</section>)}</div></div>}
