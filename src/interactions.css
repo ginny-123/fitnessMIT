@@ -1,0 +1,25 @@
+.water-metric { border:1px solid var(--line); background:white; padding:19px 21px; border-radius:16px; text-align:left; color:inherit; }
+.water-metric > span { font-size:11px; color:var(--muted); font-weight:700; }
+.water-metric > b { font:800 25px Manrope; display:block; margin:7px 0 2px; }
+.water-metric > small { color:var(--muted); }
+.water-metric i { height:5px; background:#e6edf3; border-radius:9px; display:block; margin-top:15px; overflow:hidden; }
+.water-metric em { height:100%; background:var(--teal); display:block; border-radius:9px; }
+.inline-stepper { display:flex; gap:7px; margin-top:11px; }
+.inline-stepper button { border:1px solid var(--line); background:#f7fafb; color:#31506b; border-radius:8px; padding:6px 10px; font-size:10px; font-weight:800; }
+.inline-stepper button:last-child { background:#e7f8f6; color:#087d78; }
+.inline-stepper button:disabled, .water-actions button:disabled { opacity:.4; cursor:not-allowed; }
+.meal-editor-list { display:grid; }
+.meal-editor { display:grid; grid-template-columns:25px 62px minmax(0,1fr) 70px; gap:11px; align-items:center; padding:14px 0; border-top:1px solid #edf1f4; }
+.meal-editor:first-child { border-top:0; }
+.meal-editor > .check { background:white; }
+.meal-editor.done > .check { background:var(--green); border-color:var(--green); }
+.meal-editor.done .meal-choice { opacity:.58; }
+.meal-editor time { font-size:10px; color:var(--muted); font-weight:700; }
+.meal-choice select { width:100%; border:1px solid var(--line); border-radius:9px; padding:9px 30px 9px 10px; background:#f8fafb; color:#10243e; font-weight:700; font-size:12px; }
+.meal-choice small { display:block; color:var(--muted); font-size:10px; margin:5px 2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+@media(max-width:560px){
+  .water-metric { padding:15px; }
+  .water-metric > b { font-size:19px; }
+  .meal-editor { grid-template-columns:25px 48px minmax(0,1fr); }
+  .meal-editor > .macro { grid-column:3; text-align:left; }
+}

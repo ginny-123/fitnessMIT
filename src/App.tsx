@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { dayNames, mealsByDay, workouts, type Exercise, type Workout } from './data'
+import { dayNames, mealLibrary, mealsByDay, workouts, type Exercise, type Workout } from './data'
 import { downloadBackup, emptyStore, loadStore, saveStore, type ExerciseLog, type Store, type WorkoutLog } from './storage'
 
 type View = 'today'|'workout'|'nutrition'|'progress'|'plan'|'settings'
@@ -18,8 +18,12 @@ function App(){
   useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)}},[toast])
   const selectedDate=new Date(`${date}T12:00:00`), day=selectedDate.getDay()
   const workout=workouts.find(w=>w.day===day)
-  const meals=mealsByDay[day]
+  const plannedMeals=mealsByDay[day]
   const nutrition=store.nutrition.find(n=>n.date===date)
+  const meals=plannedMeals.map(slot=>{
+    const chosen=mealLibrary.find(m=>m.name===nutrition?.selectedMeals?.[slot.id])
+    return chosen?{...chosen,id:slot.id,time:slot.time}:slot
+  })
   const completedMeals=nutrition?.completedMeals||[]
   const mealTotals=meals.reduce((a,m)=>({cal:a.cal+m.calories,pro:a.pro+m.protein}),{cal:0,pro:0})
   const consumed=meals.filter(m=>completedMeals.includes(m.id)).reduce((a,m)=>({cal:a.cal+m.calories,pro:a.pro+m.protein}),{cal:0,pro:0})
@@ -35,6 +39,16 @@ function App(){
     const current=s.nutrition.find(n=>n.date===date)||{date,completedMeals:[],calories:0,protein:0,water:0}
     return {...s,nutrition:[...s.nutrition.filter(n=>n.date!==date),{...current,water:Math.max(0,(current.water||0)+amount)}]}
   })
+  const chooseMeal=(slotId:string,mealName:string)=>setStore(s=>{
+    const current=s.nutrition.find(n=>n.date===date)||{date,completedMeals:[],calories:0,protein:0,water:0}
+    const selectedMeals={...(current.selectedMeals||{}),[slotId]:mealName}
+    const resolved=plannedMeals.map(slot=>{
+      const chosen=mealLibrary.find(m=>m.name===selectedMeals[slot.id])
+      return chosen?{...chosen,id:slot.id,time:slot.time}:slot
+    })
+    const total=resolved.filter(m=>current.completedMeals.includes(m.id)).reduce((a,m)=>({c:a.c+m.calories,p:a.p+m.protein}),{c:0,p:0})
+    return {...s,nutrition:[...s.nutrition.filter(n=>n.date!==date),{...current,selectedMeals,calories:total.c,protein:total.p}]}
+  })
   const openWorkout=()=>{if(workout){setActiveWorkout(workout);setView('workout')}}
   const nav=(v:View)=>{setView(v);if(v!=='workout')setActiveWorkout(null)}
   return <div className="app-shell">
@@ -47,7 +61,7 @@ function App(){
       <header><div><span className="eyebrow">4-WEEK BUILD · WEEK 1</span><h1>{labels[view]}</h1></div><div className="header-actions"><label className="date-picker"><span>Selected day</span><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><span className="avatar">M</span></div></header>
       {view==='today'&&<Today date={date} day={day} workout={workout} meals={meals} consumed={consumed} mealTotals={mealTotals} water={nutrition?.water||0} onWorkout={openWorkout} onMeal={toggleMeal} completedMeals={completedMeals} onWater={updateWater}/>} 
       {view==='workout'&&<WorkoutView date={date} workout={activeWorkout||workout||workouts[0]} store={store} setStore={setStore} onDone={()=>{setToast('Workout saved');setView('today');setActiveWorkout(null)}}/>}
-      {view==='nutrition'&&<Nutrition date={date} meals={meals} completed={completedMeals} onMeal={toggleMeal} consumed={consumed} total={mealTotals} water={nutrition?.water||0} onWater={updateWater}/>} 
+      {view==='nutrition'&&<Nutrition date={date} meals={meals} completed={completedMeals} onMeal={toggleMeal} onChooseMeal={chooseMeal} consumed={consumed} total={mealTotals} water={nutrition?.water||0} onWater={updateWater}/>} 
       {view==='progress'&&<Progress store={store}/>} 
       {view==='plan'&&<Plan/>}
       {view==='settings'&&<Settings store={store} setStore={setStore} toast={setToast}/>} 
@@ -67,7 +81,7 @@ function Today({date,day,workout,meals,consumed,mealTotals,water,onWorkout,onMea
     <section className="metrics">
       <Metric label="Protein" value={`${consumed.pro}g`} sub={`of ${mealTotals.pro}g planned`} pct={consumed.pro/mealTotals.pro}/>
       <Metric label="Energy" value={consumed.cal.toLocaleString()} sub={`of ${mealTotals.cal.toLocaleString()} kcal`} pct={consumed.cal/mealTotals.cal}/>
-      <Metric label="Water" value={`${water} ml`} sub="Tap to add 250 ml" pct={water/3000} onClick={()=>onWater(250)}/>
+      <div className="metric water-metric"><span>Water</span><b>{water} ml</b><small>Daily guide: approximately 3,000 ml</small><i><em style={{width:`${Math.min(100,water/3000*100)}%`}}/></i><div className="inline-stepper"><button onClick={()=>onWater(-250)} disabled={water===0}>− 250</button><button onClick={()=>onWater(250)}>+ 250</button></div></div>
     </section>
     <div className="two-col">
       <section className="panel"><div className="panel-head"><div><span className="eyebrow">TODAY'S FUEL</span><h3>Meal timeline</h3></div><span className="mini-status">{completedMeals.length}/{meals.length} complete</span></div>
@@ -109,7 +123,7 @@ function WorkoutView({date,workout,store,setStore,onDone}:{date:string;workout:W
   </div>
 }
 
-function Nutrition({date,meals,completed,onMeal,consumed,total,water,onWater}:{date:string;meals:typeof mealsByDay[0];completed:string[];onMeal:(id:string)=>void;consumed:{cal:number;pro:number};total:{cal:number;pro:number};water:number;onWater:(n:number)=>void}){return <div className="page"><section className="nutrition-hero"><div><span className="eyebrow">{formatDate(date)} · DAILY FUEL</span><h2>Eat to perform. Track what happened.</h2><p>Planned totals are estimates; portions and cooking oil determine actual intake.</p></div><div className="macro-rings"><div><b>{consumed.cal}</b><small>kcal logged</small></div><div><b>{consumed.pro}g</b><small>protein</small></div></div></section><div className="two-col nutrition-grid"><section className="panel"><div className="panel-head"><div><span className="eyebrow">MEAL PLAN</span><h3>{consumed.cal.toLocaleString()} / {total.cal.toLocaleString()} kcal</h3></div></div><div className="meal-list large">{meals.map(m=><button className={`meal-row ${completed.includes(m.id)?'done':''}`} key={m.id} onClick={()=>onMeal(m.id)}><span className="check">{completed.includes(m.id)?'✓':''}</span><time>{m.time}</time><span className="meal-copy"><b>{m.name}</b><small>{m.detail}</small></span><span className="macro">{m.calories}<small>kcal · {m.protein}g P</small></span></button>)}</div></section><section className="side-stack"><section className="panel water"><span className="eyebrow">HYDRATION</span><div className="water-total"><b>{water}</b><span>ml</span></div><div className="water-actions"><button onClick={()=>onWater(-250)}>− 250</button><button onClick={()=>onWater(250)}>+ 250 ml</button></div></section><section className="panel"><span className="eyebrow">FOOD RULES</span><h3>Simple boundaries</h3><ul className="clean-list"><li>Chicken and eggs are the only animal proteins beyond dairy.</li><li>No soy, tofu, tempeh, edamame or soy protein.</li><li>Measure oil, ghee, nuts and paneer portions.</li><li>Keep protein steady on rest days.</li></ul></section></section></div></div>}
+function Nutrition({date,meals,completed,onMeal,onChooseMeal,consumed,total,water,onWater}:{date:string;meals:typeof mealsByDay[0];completed:string[];onMeal:(id:string)=>void;onChooseMeal:(slotId:string,mealName:string)=>void;consumed:{cal:number;pro:number};total:{cal:number;pro:number};water:number;onWater:(n:number)=>void}){return <div className="page"><section className="nutrition-hero"><div><span className="eyebrow">{formatDate(date)} · DAILY FUEL</span><h2>Eat to perform. Track what happened.</h2><p>Choose any predefined meal for each time slot, then mark it complete.</p></div><div className="macro-rings"><div><b>{consumed.cal}</b><small>kcal logged</small></div><div><b>{consumed.pro}g</b><small>protein</small></div></div></section><div className="two-col nutrition-grid"><section className="panel"><div className="panel-head"><div><span className="eyebrow">MEAL PLAN</span><h3>{consumed.cal.toLocaleString()} / {total.cal.toLocaleString()} kcal</h3></div></div><div className="meal-editor-list">{meals.map(m=><div className={`meal-editor ${completed.includes(m.id)?'done':''}`} key={m.id}><button className="check" aria-label={`Mark ${m.name} complete`} onClick={()=>onMeal(m.id)}>{completed.includes(m.id)?'✓':''}</button><time>{m.time}</time><div className="meal-choice"><select aria-label={`Choose meal for ${m.time}`} value={m.name} onChange={e=>onChooseMeal(m.id,e.target.value)}>{mealLibrary.map(option=><option key={option.name} value={option.name}>{option.name}</option>)}</select><small>{m.detail}</small></div><span className="macro">{m.calories}<small>kcal · {m.protein}g P</small></span></div>)}</div></section><section className="side-stack"><section className="panel water"><span className="eyebrow">HYDRATION</span><div className="water-total"><b>{water}</b><span>ml</span></div><div className="water-actions"><button onClick={()=>onWater(-250)} disabled={water===0}>− 250</button><button onClick={()=>onWater(250)}>+ 250 ml</button></div></section><section className="panel"><span className="eyebrow">FOOD RULES</span><h3>Simple boundaries</h3><ul className="clean-list"><li>Chicken and eggs are the only animal proteins beyond dairy.</li><li>No soy, tofu, tempeh, edamame or soy protein.</li><li>Measure oil, ghee, nuts and paneer portions.</li><li>Keep protein steady on rest days.</li></ul></section></section></div></div>}
 
 function Progress({store}:{store:Store}){
   const last28=Array.from({length:28},(_,i)=>{const d=new Date();d.setDate(d.getDate()-27+i);return iso(d)})

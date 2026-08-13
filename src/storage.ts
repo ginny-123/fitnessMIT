@@ -1,7 +1,7 @@
 export type SetLog = { weight: number; reps: number; rir: number; done: boolean }
 export type ExerciseLog = { exerciseId: string; sets: SetLog[] }
 export type WorkoutLog = { id: string; date: string; workoutId: string; completed: boolean; exercises: ExerciseLog[]; duration?: number }
-export type DayNutrition = { date: string; completedMeals: string[]; calories: number; protein: number; water: number }
+export type DayNutrition = { date: string; completedMeals: string[]; calories: number; protein: number; water: number; selectedMeals?: Record<string,string> }
 export type Measurement = { date: string; weight: number; waist?: number; bodyFat?: number }
 export type Store = { workouts: WorkoutLog[]; nutrition: DayNutrition[]; measurements: Measurement[]; lastBackup?: string }
 

@@ -51,4 +51,8 @@ export const mealsByDay: Record<number, Meal[]> = {
   0:[{...smoothie,id:'su-breakfast'},{id:'su-lunch',time:'1:00 PM',name:'Chicken vegetable curry',detail:'180g chicken · rice · salad · yogurt',calories:780,protein:52},{id:'su-snack',time:'5:00 PM',name:'Yogurt, fruit & nuts',detail:'Greek yogurt · fruit · measured nuts',calories:300,protein:23},{id:'su-dinner',time:'8:00 PM',name:'Dal paneer plate',detail:'Dal · paneer · 2 chapatis · vegetables',calories:760,protein:40}],
 }
 
+export const mealLibrary = Array.from(
+  new Map(Object.values(mealsByDay).flat().map(meal => [meal.name, meal])).values(),
+)
+
 export const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
