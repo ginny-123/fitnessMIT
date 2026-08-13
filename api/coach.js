@@ -33,33 +33,40 @@ export default async function handler(req, res) {
   if (!review || review.schemaVersion !== 'fittrack-coach-review-v1') return res.status(400).json({ error: 'A valid aggregate Coach Review is required.' })
   if (action === 'ask' && (typeof question !== 'string' || !question.trim() || question.length > 1200)) return res.status(400).json({ error: 'Enter a question up to 1,200 characters.' })
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+  const models = [...new Set([process.env.GEMINI_MODEL, 'gemini-2.5-flash', 'gemini-2.5-flash-lite'].filter(Boolean))]
   const prompt = action === 'generate-plan'
     ? `Create the next four-week plan from this aggregate review. Today is ${new Date().toISOString().slice(0, 10)}.\n\n${JSON.stringify(review)}`
     : `Question: ${question.trim()}\n\nAggregate FitTrack context:\n${JSON.stringify(review)}`
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 25_000)
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstruction(action) }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: action === 'generate-plan'
-          ? { temperature: 0.25, maxOutputTokens: 8192, responseMimeType: 'application/json' }
-          : { temperature: 0.35, maxOutputTokens: 1200 },
-      }),
-    })
-    const data = await response.json()
-    if (!response.ok) {
-      const status = response.status === 429 ? 429 : 502
-      return res.status(status).json({ error: response.status === 429 ? 'Gemini free-tier quota is temporarily exhausted. Try again later.' : 'Gemini could not complete the request.' })
+    let lastError = null
+    for (const model of models) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST', signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstruction(action) }] },
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: action === 'generate-plan'
+            ? { temperature: 0.25, maxOutputTokens: 8192, responseMimeType: 'application/json' }
+            : { temperature: 0.35, maxOutputTokens: 1200 },
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (response.ok) {
+        const text = data?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim()
+        if (!text) return res.status(502).json({ error: 'Gemini returned an empty or safety-blocked response.' })
+        res.setHeader('Cache-Control', 'no-store')
+        return res.status(200).json({ text, model })
+      }
+      lastError = { status: response.status, message: String(data?.error?.message || '') }
+      if (![400, 404].includes(response.status) || !/model|not found|not supported/i.test(lastError.message)) break
     }
-    const text = data?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim()
-    if (!text) return res.status(502).json({ error: 'Gemini returned an empty response.' })
-    res.setHeader('Cache-Control', 'no-store')
-    return res.status(200).json({ text })
+    if (lastError?.status === 429) return res.status(429).json({ error: 'Gemini free-tier quota is temporarily exhausted. Check Google AI Studio usage or try again later.' })
+    if ([401,403].includes(lastError?.status)) return res.status(502).json({ error: `Gemini rejected the API key or project permissions (${lastError.status}). Verify the key in Google AI Studio and Vercel Production settings.` })
+    const safeDetail = lastError?.message.replace(/AIza[\w-]+/g, '[redacted]').slice(0, 240)
+    return res.status(502).json({ error: safeDetail ? `Gemini request failed: ${safeDetail}` : 'Gemini could not complete the request.' })
   } catch (error) {
     return res.status(502).json({ error: error?.name === 'AbortError' ? 'Gemini timed out. Try again.' : 'Gemini is temporarily unavailable.' })
   } finally { clearTimeout(timeout) }
