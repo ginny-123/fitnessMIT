@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   if (!review || review.schemaVersion !== 'fittrack-coach-review-v1') return res.status(400).json({ error: 'A valid aggregate Coach Review is required.' })
   if (action === 'ask' && (typeof question !== 'string' || !question.trim() || question.length > 1200)) return res.status(400).json({ error: 'Enter a question up to 1,200 characters.' })
 
-  const models = [...new Set([process.env.GEMINI_MODEL, 'gemini-2.5-flash', 'gemini-2.5-flash-lite'].filter(Boolean))]
+  const models = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.6-flash', 'gemini-3.5-flash-lite'].filter(Boolean))]
   const prompt = action === 'generate-plan'
     ? `Create the next four-week plan from this aggregate review. Today is ${new Date().toISOString().slice(0, 10)}.\n\n${JSON.stringify(review)}`
     : `Question: ${question.trim()}\n\nAggregate FitTrack context:\n${JSON.stringify(review)}`
@@ -49,8 +49,8 @@ export default async function handler(req, res) {
           systemInstruction: { parts: [{ text: systemInstruction(action) }] },
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: action === 'generate-plan'
-            ? { temperature: 0.25, maxOutputTokens: 8192, responseMimeType: 'application/json' }
-            : { temperature: 0.35, maxOutputTokens: 1200 },
+            ? { maxOutputTokens: 8192, responseMimeType: 'application/json' }
+            : { maxOutputTokens: 1200 },
         }),
       })
       const data = await response.json().catch(() => ({}))
