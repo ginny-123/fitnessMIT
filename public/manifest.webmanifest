@@ -1,0 +1,10 @@
+{
+  "name": "FitTrack Personal",
+  "short_name": "FitTrack",
+  "description": "Private workout, nutrition, and progress tracking.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071a2f",
+  "theme_color": "#071a2f",
+  "icons": []
+}

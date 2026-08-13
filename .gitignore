@@ -1,0 +1,14 @@
+node_modules/
+dist/
+tmp/
+.env
+.env.*
+*.local
+
+# Personal health source files must never be committed.
+*.docx
+*.xlsx
+*.xls
+*.pdf
+*.csv
+*.json.bak

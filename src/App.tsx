@@ -1,0 +1,134 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { dayNames, mealsByDay, workouts, type Exercise, type Workout } from './data'
+import { downloadBackup, emptyStore, loadStore, saveStore, type ExerciseLog, type Store, type WorkoutLog } from './storage'
+
+type View = 'today'|'workout'|'nutrition'|'progress'|'plan'|'settings'
+const icons: Record<View,string> = {today:'⌂',workout:'◆',nutrition:'●',progress:'↗',plan:'▤',settings:'⚙'}
+const labels: Record<View,string> = {today:'Today',workout:'Workout',nutrition:'Nutrition',progress:'Progress',plan:'Plan',settings:'Settings'}
+const iso = (d=new Date()) => d.toISOString().slice(0,10)
+const formatDate = (d:string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined,{month:'short',day:'numeric'})
+
+function App(){
+  const [view,setView]=useState<View>('today')
+  const [date,setDate]=useState(iso())
+  const [store,setStore]=useState<Store>(loadStore)
+  const [toast,setToast]=useState('')
+  const [activeWorkout,setActiveWorkout]=useState<Workout|null>(null)
+  useEffect(()=>saveStore(store),[store])
+  useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)}},[toast])
+  const selectedDate=new Date(`${date}T12:00:00`), day=selectedDate.getDay()
+  const workout=workouts.find(w=>w.day===day)
+  const meals=mealsByDay[day]
+  const nutrition=store.nutrition.find(n=>n.date===date)
+  const completedMeals=nutrition?.completedMeals||[]
+  const mealTotals=meals.reduce((a,m)=>({cal:a.cal+m.calories,pro:a.pro+m.protein}),{cal:0,pro:0})
+  const consumed=meals.filter(m=>completedMeals.includes(m.id)).reduce((a,m)=>({cal:a.cal+m.calories,pro:a.pro+m.protein}),{cal:0,pro:0})
+
+  const toggleMeal=(id:string)=>setStore(s=>{
+    const current=s.nutrition.find(n=>n.date===date)||{date,completedMeals:[],calories:0,protein:0,water:0}
+    const ids=current.completedMeals.includes(id)?current.completedMeals.filter(x=>x!==id):[...current.completedMeals,id]
+    const total=meals.filter(m=>ids.includes(m.id)).reduce((a,m)=>({c:a.c+m.calories,p:a.p+m.protein}),{c:0,p:0})
+    const next={...current,completedMeals:ids,calories:total.c,protein:total.p}
+    return {...s,nutrition:[...s.nutrition.filter(n=>n.date!==date),next]}
+  })
+  const updateWater=(amount:number)=>setStore(s=>{
+    const current=s.nutrition.find(n=>n.date===date)||{date,completedMeals:[],calories:0,protein:0,water:0}
+    return {...s,nutrition:[...s.nutrition.filter(n=>n.date!==date),{...current,water:Math.max(0,(current.water||0)+amount)}]}
+  })
+  const openWorkout=()=>{if(workout){setActiveWorkout(workout);setView('workout')}}
+  const nav=(v:View)=>{setView(v);if(v!=='workout')setActiveWorkout(null)}
+  return <div className="app-shell">
+    <aside className="sidebar">
+      <div className="brand"><span className="brand-mark">FT</span><span><b>FitTrack</b><small>Personal performance</small></span></div>
+      <nav>{(['today','workout','nutrition','progress','plan','settings'] as View[]).map(v=><button key={v} className={view===v?'active':''} onClick={()=>nav(v)}><span>{icons[v]}</span>{labels[v]}</button>)}</nav>
+      <div className="privacy"><b>Private by design</b><small>Your records stay on this device.</small></div>
+    </aside>
+    <main>
+      <header><div><span className="eyebrow">4-WEEK BUILD · WEEK 1</span><h1>{labels[view]}</h1></div><div className="header-actions"><label className="date-picker"><span>Selected day</span><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><span className="avatar">M</span></div></header>
+      {view==='today'&&<Today date={date} day={day} workout={workout} meals={meals} consumed={consumed} mealTotals={mealTotals} water={nutrition?.water||0} onWorkout={openWorkout} onMeal={toggleMeal} completedMeals={completedMeals} onWater={updateWater}/>} 
+      {view==='workout'&&<WorkoutView date={date} workout={activeWorkout||workout||workouts[0]} store={store} setStore={setStore} onDone={()=>{setToast('Workout saved');setView('today');setActiveWorkout(null)}}/>}
+      {view==='nutrition'&&<Nutrition date={date} meals={meals} completed={completedMeals} onMeal={toggleMeal} consumed={consumed} total={mealTotals} water={nutrition?.water||0} onWater={updateWater}/>} 
+      {view==='progress'&&<Progress store={store}/>} 
+      {view==='plan'&&<Plan/>}
+      {view==='settings'&&<Settings store={store} setStore={setStore} toast={setToast}/>} 
+    </main>
+    <div className="bottom-nav">{(['today','workout','nutrition','progress','plan'] as View[]).map(v=><button key={v} className={view===v?'active':''} onClick={()=>nav(v)}><span>{icons[v]}</span><small>{labels[v]}</small></button>)}</div>
+    {toast&&<div className="toast">✓ {toast}</div>}
+  </div>
+}
+
+function Today({date,day,workout,meals,consumed,mealTotals,water,onWorkout,onMeal,completedMeals,onWater}:{date:string;day:number;workout?:Workout;meals:typeof mealsByDay[0];consumed:{cal:number;pro:number};mealTotals:{cal:number;pro:number};water:number;onWorkout:()=>void;onMeal:(id:string)=>void;completedMeals:string[];onWater:(n:number)=>void}){
+  const training=!!workout
+  return <div className="page">
+    <section className={`hero ${training?'training':'recovery'}`}>
+      <div><span className="pill">{dayNames[day]} · {formatDate(date)}</span><h2>{training?workout.title:'Recover, refuel, repeat.'}</h2><p>{training?workout.focus:'Easy movement, mobility, protein and consistent hydration.'}</p>{training?<button className="primary" onClick={onWorkout}>Start workout <span>→</span></button>:<button className="primary ghost">Recovery day</button>}</div>
+      <div className="hero-ring"><b>{training?'~60':'20–30'}</b><small>{training?'minutes':'min walk'}</small></div>
+    </section>
+    <section className="metrics">
+      <Metric label="Protein" value={`${consumed.pro}g`} sub={`of ${mealTotals.pro}g planned`} pct={consumed.pro/mealTotals.pro}/>
+      <Metric label="Energy" value={consumed.cal.toLocaleString()} sub={`of ${mealTotals.cal.toLocaleString()} kcal`} pct={consumed.cal/mealTotals.cal}/>
+      <Metric label="Water" value={`${water} ml`} sub="Tap to add 250 ml" pct={water/3000} onClick={()=>onWater(250)}/>
+    </section>
+    <div className="two-col">
+      <section className="panel"><div className="panel-head"><div><span className="eyebrow">TODAY'S FUEL</span><h3>Meal timeline</h3></div><span className="mini-status">{completedMeals.length}/{meals.length} complete</span></div>
+        <div className="meal-list">{meals.map(m=><button className={`meal-row ${completedMeals.includes(m.id)?'done':''}`} key={m.id} onClick={()=>onMeal(m.id)}><span className="check">{completedMeals.includes(m.id)?'✓':''}</span><time>{m.time}</time><span className="meal-copy"><b>{m.name}</b><small>{m.detail}</small></span><span className="macro">{m.protein}g<small>protein</small></span></button>)}</div>
+      </section>
+      <section className="panel recommendation"><span className="eyebrow">COACHING NOTE</span><h3>{training?'Earn the increase':'Recovery drives the next session'}</h3><p>{training?'Keep two clean reps in reserve. Increase only after every set reaches the top of its range with controlled form.':'A short walk and normal protein intake are enough. You do not need to “make up” missed training today.'}</p><div className="rule"><b>{training?'Progression rule':'Today’s focus'}</b><span>{training?'Top reps × all sets × RIR 1–2 → add one machine increment':'20–30 min easy movement · normal protein · sleep 7–9 hours'}</span></div></section>
+    </div>
+  </div>
+}
+
+function Metric({label,value,sub,pct,onClick}:{label:string;value:string;sub:string;pct:number;onClick?:()=>void}){return <button className="metric" onClick={onClick}><span>{label}</span><b>{value}</b><small>{sub}</small><i><em style={{width:`${Math.min(100,pct*100)}%`}}/></i></button>}
+
+function recommendation(ex:Exercise, history:WorkoutLog[]){
+  const past=history.flatMap(w=>w.exercises).filter(e=>e.exerciseId===ex.id)
+  const latest=past.at(-1), prior=past.at(-2)
+  if(!latest){return {weight:ex.startingWeight||0,text:ex.startingWeight?`Start from your recent baseline and finish with 2–3 reps in reserve.`:'Use a light discovery load and establish a clean baseline.'}}
+  const success=(log:ExerciseLog)=>log.sets.length>=ex.sets&&log.sets.every(s=>s.done&&s.reps>=ex.maxReps&&s.rir>=1)
+  const lastWeight=latest.sets[0]?.weight||ex.startingWeight||0
+  if(prior&&success(latest)&&success(prior)) return {weight:lastWeight+ex.increment,text:`Increase one increment: top reps were completed in two sessions with reps in reserve.`}
+  const failed=latest.sets.filter(s=>s.done&&s.reps<ex.minReps).length
+  if(failed>=2&&prior&&prior.sets.filter(s=>s.done&&s.reps<ex.minReps).length>=2) return {weight:Math.max(0,lastWeight-ex.increment),text:'Reduce one increment: minimum reps were missed in two sessions.'}
+  return {weight:lastWeight,text:'Keep the same load and build clean repetitions before increasing.'}
+}
+
+function WorkoutView({date,workout,store,setStore,onDone}:{date:string;workout:Workout;store:Store;setStore:(s:Store)=>void;onDone:()=>void}){
+  const existing=store.workouts.find(w=>w.date===date&&w.workoutId===workout.id)
+  const makeLogs=()=>workout.exercises.map(ex=>({exerciseId:ex.id,sets:Array.from({length:ex.sets},()=>({weight:recommendation(ex,store.workouts).weight,reps:ex.minReps,rir:2,done:false}))}))
+  const [logs,setLogs]=useState<ExerciseLog[]>(existing?.exercises||makeLogs)
+  const [started]=useState(Date.now()), [rest,setRest]=useState(0)
+  useEffect(()=>{if(rest<=0)return;const t=setInterval(()=>setRest(r=>r-1),1000);return()=>clearInterval(t)},[rest])
+  const update=(ei:number,si:number,key:'weight'|'reps'|'rir',value:number)=>setLogs(ls=>ls.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,[key]:value})}))
+  const toggle=(ei:number,si:number,seconds:number)=>{setLogs(ls=>ls.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,done:!s.done})}));setRest(seconds)}
+  const completed=logs.reduce((a,e)=>a+e.sets.filter(s=>s.done).length,0), total=logs.reduce((a,e)=>a+e.sets.length,0)
+  const finish=()=>{const entry:WorkoutLog={id:`${date}-${workout.id}`,date,workoutId:workout.id,completed:completed===total,exercises:logs,duration:Math.round((Date.now()-started)/60000)};setStore({...store,workouts:[...store.workouts.filter(w=>w.id!==entry.id),entry]});onDone()}
+  return <div className="page workout-page"><section className="workout-banner"><div><span className="eyebrow">{dayNames[workout.day]} · LIVE SESSION</span><h2>{workout.title}</h2><p>{workout.focus}</p></div><div className="session-progress"><b>{completed}/{total}</b><small>sets complete</small></div></section>
+    {rest>0&&<div className="rest-timer"><span>Rest timer</span><b>{Math.floor(rest/60)}:{String(rest%60).padStart(2,'0')}</b><button onClick={()=>setRest(0)}>Skip</button></div>}
+    <div className="exercise-stack">{workout.exercises.map((ex,ei)=>{const rec=recommendation(ex,store.workouts);return <section className="exercise-card" key={ex.id}><div className="exercise-head"><span className="sequence">{ei+1}</span><div><h3>{ex.name}</h3><p>{ex.sets} × {ex.minReps}–{ex.maxReps} · {ex.rest}s rest · {ex.cue}</p></div><div className="suggested"><small>Suggested</small><b>{rec.weight||'Find'}{rec.weight?' kg':''}</b></div></div><div className="rec-reason">↗ {rec.text}</div><div className="sets-table"><div className="set-row labels"><span>Set</span><span>Weight</span><span>Reps</span><span>RIR</span><span>Done</span></div>{logs[ei].sets.map((s,si)=><div className={`set-row ${s.done?'done':''}`} key={si}><b>{si+1}</b><input aria-label={`${ex.name} set ${si+1} weight`} type="number" value={s.weight} step="0.5" onChange={e=>update(ei,si,'weight',+e.target.value)}/><input aria-label={`${ex.name} set ${si+1} reps`} type="number" value={s.reps} onChange={e=>update(ei,si,'reps',+e.target.value)}/><select aria-label={`${ex.name} set ${si+1} reps in reserve`} value={s.rir} onChange={e=>update(ei,si,'rir',+e.target.value)}><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><button aria-label={`Complete ${ex.name} set ${si+1}`} onClick={()=>toggle(ei,si,ex.rest)}>{s.done?'✓':''}</button></div>)}</div></section>})}</div>
+    <button className="finish" onClick={finish}>Save workout · {completed}/{total} sets</button>
+  </div>
+}
+
+function Nutrition({date,meals,completed,onMeal,consumed,total,water,onWater}:{date:string;meals:typeof mealsByDay[0];completed:string[];onMeal:(id:string)=>void;consumed:{cal:number;pro:number};total:{cal:number;pro:number};water:number;onWater:(n:number)=>void}){return <div className="page"><section className="nutrition-hero"><div><span className="eyebrow">{formatDate(date)} · DAILY FUEL</span><h2>Eat to perform. Track what happened.</h2><p>Planned totals are estimates; portions and cooking oil determine actual intake.</p></div><div className="macro-rings"><div><b>{consumed.cal}</b><small>kcal logged</small></div><div><b>{consumed.pro}g</b><small>protein</small></div></div></section><div className="two-col nutrition-grid"><section className="panel"><div className="panel-head"><div><span className="eyebrow">MEAL PLAN</span><h3>{consumed.cal.toLocaleString()} / {total.cal.toLocaleString()} kcal</h3></div></div><div className="meal-list large">{meals.map(m=><button className={`meal-row ${completed.includes(m.id)?'done':''}`} key={m.id} onClick={()=>onMeal(m.id)}><span className="check">{completed.includes(m.id)?'✓':''}</span><time>{m.time}</time><span className="meal-copy"><b>{m.name}</b><small>{m.detail}</small></span><span className="macro">{m.calories}<small>kcal · {m.protein}g P</small></span></button>)}</div></section><section className="side-stack"><section className="panel water"><span className="eyebrow">HYDRATION</span><div className="water-total"><b>{water}</b><span>ml</span></div><div className="water-actions"><button onClick={()=>onWater(-250)}>− 250</button><button onClick={()=>onWater(250)}>+ 250 ml</button></div></section><section className="panel"><span className="eyebrow">FOOD RULES</span><h3>Simple boundaries</h3><ul className="clean-list"><li>Chicken and eggs are the only animal proteins beyond dairy.</li><li>No soy, tofu, tempeh, edamame or soy protein.</li><li>Measure oil, ghee, nuts and paneer portions.</li><li>Keep protein steady on rest days.</li></ul></section></section></div></div>}
+
+function Progress({store}:{store:Store}){
+  const last28=Array.from({length:28},(_,i)=>{const d=new Date();d.setDate(d.getDate()-27+i);return iso(d)})
+  const sessions=store.workouts.filter(w=>last28.includes(w.date)&&w.completed)
+  const sets=sessions.reduce((a,w)=>a+w.exercises.reduce((b,e)=>b+e.sets.filter(s=>s.done).length,0),0)
+  const nutritionDays=store.nutrition.filter(n=>last28.includes(n.date)&&n.protein>=140).length
+  const measurements=[...store.measurements].sort((a,b)=>a.date.localeCompare(b.date))
+  const weightDelta=measurements.length>1?measurements.at(-1)!.weight-measurements[0].weight:0
+  const maxVol=Math.max(1,...sessions.map(w=>w.exercises.reduce((a,e)=>a+e.sets.reduce((b,s)=>b+(s.done?s.weight*s.reps:0),0),0)))
+  return <div className="page"><section className="progress-head"><div><span className="eyebrow">LAST 28 DAYS</span><h2>Progress is a pattern, not a single reading.</h2></div></section><section className="metrics"><Metric label="Workouts" value={String(sessions.length)} sub="completed sessions" pct={sessions.length/16}/><Metric label="Working sets" value={String(sets)} sub="quality sets logged" pct={sets/160}/><Metric label="Protein days" value={String(nutritionDays)} sub="days at 140g+" pct={nutritionDays/28}/></section><div className="two-col"><section className="panel"><div className="panel-head"><div><span className="eyebrow">TRAINING LOAD</span><h3>Session volume</h3></div><span className="mini-status">weight × reps</span></div><div className="bars">{sessions.length?sessions.slice(-10).map(w=>{const vol=w.exercises.reduce((a,e)=>a+e.sets.reduce((b,s)=>b+(s.done?s.weight*s.reps:0),0),0);return <div key={w.id}><i style={{height:`${Math.max(8,vol/maxVol*100)}%`}}/><small>{formatDate(w.date)}</small></div>}):<Empty text="Complete a workout to begin your volume chart."/>}</div></section><section className="panel"><span className="eyebrow">BODY TREND</span><h3>{measurements.at(-1)?.weight||'—'} lb <small className={weightDelta>0?'up':''}>{weightDelta?`${weightDelta>0?'+':''}${weightDelta.toFixed(1)} lb`:'baseline'}</small></h3><div className="body-card"><div><span>Latest body-fat estimate</span><b>{measurements.at(-1)?.bodyFat||'—'}%</b></div><div><span>Measurements</span><b>{measurements.length}</b></div></div><p className="muted">Use morning weight averages and waist trend. Smart-scale composition values are estimates.</p></section></div></div>
+}
+function Empty({text}:{text:string}){return <div className="empty">↗<span>{text}</span></div>}
+
+function Plan(){const [open,setOpen]=useState(workouts[0].id);return <div className="page"><section className="plan-hero"><div><span className="eyebrow">ACTIVE BLOCK · 4 WEEKS</span><h2>Build width, strength and consistency.</h2><p>Four machine-first sessions with added back, rear-delt, unilateral and core work.</p></div><div className="plan-tags"><span>4 days/week</span><span>RIR 2</span><span>55–70 min</span></div></section><section className="phase-strip"><div><b>Week 1</b><span>Establish</span></div><div><b>Week 2</b><span>Build reps</span></div><div><b>Week 3</b><span>Progress</span></div><div><b>Week 4</b><span>Consolidate</span></div></section><div className="plan-list">{workouts.map(w=><section className={`plan-day ${w.tone}`} key={w.id}><button className="plan-day-head" onClick={()=>setOpen(open===w.id?'':w.id)}><span><small>{dayNames[w.day]}</small><b>{w.title}</b><em>{w.focus}</em></span><strong>{w.exercises.length} exercises {open===w.id?'−':'+'}</strong></button>{open===w.id&&<div className="plan-exercises">{w.exercises.map((e,i)=><div key={e.id}><span>{i+1}</span><b>{e.name}</b><small>{e.sets} × {e.minReps}–{e.maxReps}</small><em>{e.cue}</em></div>)}</div>}</section>)}</div><section className="panel plan-rule"><span className="eyebrow">DOUBLE-PROGRESSION RULE</span><h3>Reps first. Load second.</h3><p>Increase one machine increment only after every prescribed set reaches the top of its range in two sessions with at least one clean rep remaining. Otherwise retain the load and build repetitions.</p></section></div>}
+
+function Settings({store,setStore,toast}:{store:Store;setStore:(s:Store)=>void;toast:(s:string)=>void}){
+  const file=useRef<HTMLInputElement>(null);const [weight,setWeight]=useState('');const [waist,setWaist]=useState('');const [fat,setFat]=useState('')
+  const add=()=>{if(!weight)return;setStore({...store,measurements:[...store.measurements,{date:iso(),weight:+weight,waist:waist?+waist:undefined,bodyFat:fat?+fat:undefined}]});setWeight('');setWaist('');setFat('');toast('Measurement added')}
+  const importFile=(f?:File)=>{if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const next=JSON.parse(String(reader.result));if(!Array.isArray(next.workouts)||!Array.isArray(next.nutrition)||!Array.isArray(next.measurements))throw Error();setStore(next);toast('Backup restored')}catch{toast('That backup file is not valid')}};reader.readAsText(f)}
+  return <div className="page"><div className="settings-grid"><section className="panel"><span className="eyebrow">BODY MEASUREMENT</span><h3>Add a morning check-in</h3><div className="form-grid"><label><span>Weight (lb)</span><input type="number" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="191.0"/></label><label><span>Waist (in)</span><input type="number" value={waist} onChange={e=>setWaist(e.target.value)} placeholder="Optional"/></label><label><span>Scale body fat %</span><input type="number" value={fat} onChange={e=>setFat(e.target.value)} placeholder="Estimate"/></label></div><button className="primary" onClick={add}>Save measurement</button></section><section className="panel"><span className="eyebrow">BACKUP & RESTORE</span><h3>Your data belongs to you.</h3><p className="muted">Download a backup regularly. Browser data can be lost if storage is cleared or the device is replaced.</p><div className="button-row"><button className="secondary" onClick={()=>{downloadBackup(store);toast('Backup downloaded')}}>Download JSON</button><button className="secondary" onClick={()=>file.current?.click()}>Restore backup</button><input ref={file} hidden type="file" accept="application/json" onChange={e=>importFile(e.target.files?.[0])}/></div></section><section className="panel"><span className="eyebrow">PRIVACY</span><h3>No login. No tracking.</h3><ul className="clean-list"><li>Records remain in this browser.</li><li>No personal data is committed to GitHub.</li><li>No advertising or analytics scripts.</li><li>Plan data contains no executable code.</li></ul></section><section className="panel danger"><span className="eyebrow">RESET</span><h3>Start over on this device</h3><p className="muted">This permanently clears locally saved workouts, meals and measurements.</p><button className="secondary" onClick={()=>{if(confirm('Clear all FitTrack data on this device?')){setStore(emptyStore);toast('Local data cleared')}}}>Clear local data</button></section></div></div>
+}
+export default App
