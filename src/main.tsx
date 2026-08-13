@@ -5,6 +5,8 @@ import './fonts.css'
 import './styles.css'
 import './interactions.css'
 import './coach.css'
+import './gemini.css'
+import './instructions.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><App /></React.StrictMode>,

@@ -4,6 +4,7 @@ import { downloadBackup, emptyStore, loadStore, saveStore, type ExerciseLog, typ
 import CoachReview from './CoachReview'
 import PlanImporter from './PlanImporter'
 import ActivePlanView from './ActivePlanView'
+import GeminiCoach from './GeminiCoach'
 
 type View = 'today'|'workout'|'nutrition'|'progress'|'plan'|'settings'
 const icons: Record<View,string> = {today:'⌂',workout:'◆',nutrition:'●',progress:'↗',plan:'▤',settings:'⚙'}
@@ -70,8 +71,8 @@ function App(){
       {view==='today'&&<Today date={date} day={day} workout={workout} meals={meals} consumed={consumed} mealTotals={mealTotals} water={nutrition?.water||0} onWorkout={openWorkout} onMeal={toggleMeal} completedMeals={completedMeals} onWater={updateWater}/>} 
       {view==='workout'&&<WorkoutView date={date} workout={activeWorkout||workout||workouts[0]} store={store} setStore={setStore} onDone={()=>{setToast('Workout saved');setView('today');setActiveWorkout(null)}}/>}
       {view==='nutrition'&&<Nutrition date={date} meals={meals} completed={completedMeals} onMeal={toggleMeal} onChooseMeal={chooseMeal} consumed={consumed} total={mealTotals} water={nutrition?.water||0} onWater={updateWater}/>} 
-      {view==='progress'&&<><Progress store={store}/><div className="page coach-page"><CoachReview store={store} activeWorkouts={activeWorkouts}/></div></>} 
-      {view==='plan'&&<>{store.activePlan?<ActivePlanView plan={store.activePlan} workouts={activeWorkouts}/>:<Plan/>}<div className="page importer-page"><PlanImporter store={store} setStore={setStore} currentWorkouts={activeWorkouts} toast={setToast}/></div></>} 
+      {view==='progress'&&<><Progress store={store}/><div className="page coach-page"><GeminiCoach store={store} activeWorkouts={activeWorkouts}/><CoachReview store={store} activeWorkouts={activeWorkouts}/></div></>} 
+      {view==='plan'&&<><div className="page instructions-page"><UniversalInstructions/></div>{store.activePlan?<ActivePlanView plan={store.activePlan} workouts={activeWorkouts}/>:<Plan/>}<div className="page importer-page"><PlanImporter store={store} setStore={setStore} currentWorkouts={activeWorkouts} toast={setToast}/></div></>} 
       {view==='settings'&&<><div className="page reminder-page"><ReminderPanel store={store} setStore={setStore} toast={setToast}/></div><Settings store={store} setStore={setStore} toast={setToast}/></>} 
     </main>
     <div className="bottom-nav">{(['today','workout','nutrition','progress','plan','settings'] as View[]).map(v=><button key={v} className={view===v?'active':''} onClick={()=>nav(v)}><span>{icons[v]}</span><small>{labels[v]}</small></button>)}</div>
@@ -102,6 +103,8 @@ function Today({date,day,workout,meals,consumed,mealTotals,water,onWorkout,onMea
 
 function Metric({label,value,sub,pct,onClick}:{label:string;value:string;sub:string;pct:number;onClick?:()=>void}){return <button className="metric" onClick={onClick}><span>{label}</span><b>{value}</b><small>{sub}</small><i><em style={{width:`${Math.min(100,pct*100)}%`}}/></i></button>}
 
+function UniversalInstructions(){return <details className="universal-instructions" open><summary><span><b>Universal workout instructions</b><small>Warm-up · tempo · RIR · rest · logging</small></span><strong>Review</strong></summary><div className="instruction-grid"><div><span>01</span><p>Warm up with <b>five minutes of easy cardio</b>.</p></div><div><span>02</span><p>For the first major exercise, complete <b>2–3 progressively heavier warm-up sets</b>.</p></div><div><span>03</span><p>Warm-up sets <b>do not count</b> as working sets.</p></div><div><span>04</span><p>Use controlled repetitions: approximately <b>2 seconds lowering</b> and <b>1–2 seconds lifting</b>.</p></div><div><span>05</span><p>Use the full comfortable range of motion.</p></div><div><span>06</span><p>Finish most sets with <b>2 reps in reserve (RIR 2)</b>.</p></div><div><span>07</span><p>Rest <b>2–3 minutes</b> after compound exercises.</p></div><div><span>08</span><p>Rest <b>60–90 seconds</b> after isolation exercises.</p></div><div><span>09</span><p>Do not increase weight merely because one set felt easy.</p></div><div><span>10</span><p>Record every working set separately.</p></div></div></details>}
+
 function recommendation(ex:Exercise, history:WorkoutLog[]){
   const past=history.flatMap(w=>w.exercises).filter(e=>e.exerciseId===ex.id)
   const latest=past.at(-1), prior=past.at(-2)
@@ -125,6 +128,7 @@ function WorkoutView({date,workout,store,setStore,onDone}:{date:string;workout:W
   const completed=logs.reduce((a,e)=>a+e.sets.filter(s=>s.done).length,0), total=logs.reduce((a,e)=>a+e.sets.length,0)
   const finish=()=>{const entry:WorkoutLog={id:`${date}-${workout.id}`,date,workoutId:workout.id,completed:completed===total,exercises:logs,duration:Math.round((Date.now()-started)/60000)};setStore({...store,workouts:[...store.workouts.filter(w=>w.id!==entry.id),entry]});onDone()}
   return <div className="page workout-page"><section className="workout-banner"><div><span className="eyebrow">{dayNames[workout.day]} · LIVE SESSION</span><h2>{workout.title}</h2><p>{workout.focus}</p></div><div className="session-progress"><b>{completed}/{total}</b><small>sets complete</small></div></section>
+    <UniversalInstructions/>
     {rest>0&&<div className="rest-timer"><span>Rest timer</span><b>{Math.floor(rest/60)}:{String(rest%60).padStart(2,'0')}</b><button onClick={()=>setRest(0)}>Skip</button></div>}
     <div className="exercise-stack">{workout.exercises.map((ex,ei)=>{const rec=recommendation(ex,store.workouts);return <section className="exercise-card" key={ex.id}><div className="exercise-head"><span className="sequence">{ei+1}</span><div><h3>{ex.name}</h3><p>{ex.sets} × {ex.minReps}–{ex.maxReps} · {ex.rest}s rest · {ex.cue}</p></div><div className="suggested"><small>Suggested</small><b>{rec.weight||'Find'}{rec.weight?' kg':''}</b></div></div><div className="rec-reason">↗ {rec.text}</div><div className="sets-table"><div className="set-row labels"><span>Set</span><span>Weight</span><span>Reps</span><span>RIR</span><span>Done</span></div>{logs[ei].sets.map((s,si)=><div className={`set-row ${s.done?'done':''}`} key={si}><b>{si+1}</b><input aria-label={`${ex.name} set ${si+1} weight`} type="number" value={s.weight} step="0.5" onChange={e=>update(ei,si,'weight',+e.target.value)}/><input aria-label={`${ex.name} set ${si+1} reps`} type="number" value={s.reps} onChange={e=>update(ei,si,'reps',+e.target.value)}/><select aria-label={`${ex.name} set ${si+1} reps in reserve`} value={s.rir} onChange={e=>update(ei,si,'rir',+e.target.value)}><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><button aria-label={`Complete ${ex.name} set ${si+1}`} onClick={()=>toggle(ei,si,ex.rest)}>{s.done?'✓':''}</button></div>)}</div></section>})}</div>
     <button className="finish" onClick={finish}>Save workout · {completed}/{total} sets</button>
