@@ -67,7 +67,7 @@ function App(){
       {view==='plan'&&<Plan/>}
       {view==='settings'&&<><div className="page reminder-page"><ReminderPanel store={store} setStore={setStore} toast={setToast}/></div><Settings store={store} setStore={setStore} toast={setToast}/></>} 
     </main>
-    <div className="bottom-nav">{(['today','workout','nutrition','progress','plan'] as View[]).map(v=><button key={v} className={view===v?'active':''} onClick={()=>nav(v)}><span>{icons[v]}</span><small>{labels[v]}</small></button>)}</div>
+    <div className="bottom-nav">{(['today','workout','nutrition','progress','plan','settings'] as View[]).map(v=><button key={v} className={view===v?'active':''} onClick={()=>nav(v)}><span>{icons[v]}</span><small>{labels[v]}</small></button>)}</div>
     {toast&&<div className="toast">✓ {toast}</div>}
   </div>
 }

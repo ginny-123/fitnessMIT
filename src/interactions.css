@@ -36,3 +36,8 @@
 .reminder-options small { color:var(--muted); font-size:9px; margin-top:3px; }
 .reminder-options input { width:18px; height:18px; accent-color:var(--teal); }
 @media(max-width:650px){ .reminder-options { grid-template-columns:1fr; } }
+@media(max-width:560px){
+  .bottom-nav button { padding-left:6px; padding-right:6px; min-width:0; flex:1; }
+  .bottom-nav button span { font-size:16px; }
+  .bottom-nav small { font-size:8px; }
+}
