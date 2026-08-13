@@ -10,3 +10,7 @@ self.addEventListener('fetch', event => {
     return response
   }).catch(() => caches.match(event.request).then(hit => hit || caches.match('/'))))
 })
+self.addEventListener('notificationclick', event => {
+  event.notification.close()
+  event.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(windows => windows[0]?.focus() || clients.openWindow('/')))
+})

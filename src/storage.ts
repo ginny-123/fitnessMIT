@@ -3,11 +3,13 @@ export type ExerciseLog = { exerciseId: string; sets: SetLog[] }
 export type WorkoutLog = { id: string; date: string; workoutId: string; completed: boolean; exercises: ExerciseLog[]; duration?: number }
 export type DayNutrition = { date: string; completedMeals: string[]; calories: number; protein: number; water: number; selectedMeals?: Record<string,string> }
 export type Measurement = { date: string; weight: number; waist?: number; bodyFat?: number }
-export type Store = { workouts: WorkoutLog[]; nutrition: DayNutrition[]; measurements: Measurement[]; lastBackup?: string }
+export type ReminderSettings = { enabled: boolean; water: boolean; meals: boolean; gym: boolean; gymTime: string; waterIntervalMinutes: number }
+export type Store = { workouts: WorkoutLog[]; nutrition: DayNutrition[]; measurements: Measurement[]; reminders?: ReminderSettings; lastBackup?: string }
 
 const KEY = 'fittrack-personal-v1'
 export const emptyStore: Store = {
   workouts: [], nutrition: [], measurements: [{date:'2026-08-11',weight:191,bodyFat:18.7}],
+  reminders: {enabled:false,water:true,meals:true,gym:true,gymTime:'19:00',waterIntervalMinutes:90},
 }
 export function loadStore(): Store {
   try { return JSON.parse(localStorage.getItem(KEY) || '') as Store } catch { return emptyStore }

@@ -15,6 +15,7 @@ function App(){
   const [toast,setToast]=useState('')
   const [activeWorkout,setActiveWorkout]=useState<Workout|null>(null)
   useEffect(()=>saveStore(store),[store])
+  useReminders(store)
   useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)}},[toast])
   const selectedDate=new Date(`${date}T12:00:00`), day=selectedDate.getDay()
   const workout=workouts.find(w=>w.day===day)
@@ -64,7 +65,7 @@ function App(){
       {view==='nutrition'&&<Nutrition date={date} meals={meals} completed={completedMeals} onMeal={toggleMeal} onChooseMeal={chooseMeal} consumed={consumed} total={mealTotals} water={nutrition?.water||0} onWater={updateWater}/>} 
       {view==='progress'&&<Progress store={store}/>} 
       {view==='plan'&&<Plan/>}
-      {view==='settings'&&<Settings store={store} setStore={setStore} toast={setToast}/>} 
+      {view==='settings'&&<><div className="page reminder-page"><ReminderPanel store={store} setStore={setStore} toast={setToast}/></div><Settings store={store} setStore={setStore} toast={setToast}/></>} 
     </main>
     <div className="bottom-nav">{(['today','workout','nutrition','progress','plan'] as View[]).map(v=><button key={v} className={view===v?'active':''} onClick={()=>nav(v)}><span>{icons[v]}</span><small>{labels[v]}</small></button>)}</div>
     {toast&&<div className="toast">✓ {toast}</div>}
@@ -138,6 +139,28 @@ function Progress({store}:{store:Store}){
 function Empty({text}:{text:string}){return <div className="empty">↗<span>{text}</span></div>}
 
 function Plan(){const [open,setOpen]=useState(workouts[0].id);return <div className="page"><section className="plan-hero"><div><span className="eyebrow">ACTIVE BLOCK · 4 WEEKS</span><h2>Build width, strength and consistency.</h2><p>Four machine-first sessions with added back, rear-delt, unilateral and core work.</p></div><div className="plan-tags"><span>4 days/week</span><span>RIR 2</span><span>55–70 min</span></div></section><section className="phase-strip"><div><b>Week 1</b><span>Establish</span></div><div><b>Week 2</b><span>Build reps</span></div><div><b>Week 3</b><span>Progress</span></div><div><b>Week 4</b><span>Consolidate</span></div></section><div className="plan-list">{workouts.map(w=><section className={`plan-day ${w.tone}`} key={w.id}><button className="plan-day-head" onClick={()=>setOpen(open===w.id?'':w.id)}><span><small>{dayNames[w.day]}</small><b>{w.title}</b><em>{w.focus}</em></span><strong>{w.exercises.length} exercises {open===w.id?'−':'+'}</strong></button>{open===w.id&&<div className="plan-exercises">{w.exercises.map((e,i)=><div key={e.id}><span>{i+1}</span><b>{e.name}</b><small>{e.sets} × {e.minReps}–{e.maxReps}</small><em>{e.cue}</em></div>)}</div>}</section>)}</div><section className="panel plan-rule"><span className="eyebrow">DOUBLE-PROGRESSION RULE</span><h3>Reps first. Load second.</h3><p>Increase one machine increment only after every prescribed set reaches the top of its range in two sessions with at least one clean rep remaining. Otherwise retain the load and build repetitions.</p></section></div>}
+
+function easternNow(){
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date())
+  const get=(type:string)=>parts.find(p=>p.type===type)?.value||''
+  return {date:`${get('year')}-${get('month')}-${get('day')}`,day:get('weekday'),hour:+get('hour'),minute:+get('minute')}
+}
+function parseTime(value:string){const match=value.match(/(\d+):(\d+)\s*(AM|PM)?/i);if(!match)return null;let hour=+match[1];const minute=+match[2];if(match[3]){if(match[3].toUpperCase()==='PM'&&hour<12)hour+=12;if(match[3].toUpperCase()==='AM'&&hour===12)hour=0}return {hour,minute}}
+function useReminders(store:Store){
+  useEffect(()=>{
+    const settings=store.reminders
+    if(!settings?.enabled||!('Notification' in window)||Notification.permission!=='granted')return
+    const notify=async(title:string,body:string,key:string)=>{if(localStorage.getItem(`fittrack-reminder-${key}`))return;localStorage.setItem(`fittrack-reminder-${key}`,'sent');const registration=await navigator.serviceWorker?.getRegistration();if(registration)await registration.showNotification(title,{body,icon:'/icon-192.png',badge:'/icon-192.png',tag:key});else new Notification(title,{body,icon:'/icon-192.png',tag:key})}
+    const check=()=>{const now=easternNow(),weekday=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(now.day);if(settings.gym&&['Mon','Tue','Thu','Fri'].includes(now.day)){const gym=parseTime(settings.gymTime);if(gym&&now.hour===gym.hour&&now.minute===gym.minute)void notify('Gym time','Your workout is ready. Open FitTrack to begin.',`${now.date}-gym`)}if(settings.meals&&weekday>=0)for(const meal of mealsByDay[weekday]){const time=parseTime(meal.time);if(time&&now.hour===time.hour&&now.minute===time.minute)void notify('Meal reminder',`${meal.name} is planned now.`,`${now.date}-meal-${meal.id}`)}if(settings.water&&now.hour>=8&&now.hour<22){const minutes=now.hour*60+now.minute-480;if(minutes>=0&&minutes%settings.waterIntervalMinutes===0)void notify('Water reminder','Take a hydration break and log it in FitTrack.',`${now.date}-water-${minutes}`)}}
+    check();const timer=window.setInterval(check,30000);return()=>window.clearInterval(timer)
+  },[store.reminders])
+}
+function ReminderPanel({store,setStore,toast}:{store:Store;setStore:(s:Store)=>void;toast:(s:string)=>void}){
+  const reminders=store.reminders||{enabled:false,water:true,meals:true,gym:true,gymTime:'19:00',waterIntervalMinutes:90}
+  const update=(patch:Partial<typeof reminders>)=>setStore({...store,reminders:{...reminders,...patch}})
+  const enable=async()=>{if(!('Notification' in window)){toast('Notifications are not supported in this browser');return}const permission=await Notification.requestPermission();update({enabled:permission==='granted'});toast(permission==='granted'?'Reminders enabled':'Notification permission was not granted')}
+  return <section className="panel reminder-panel"><span className="eyebrow">REMINDERS · EASTERN TIME</span><h3>Stay on schedule</h3><p className="muted">Gym reminders are set for 7:00 PM on Monday, Tuesday, Thursday and Friday. Install the app and allow notifications for best reliability.</p><div className="reminder-status"><span className={reminders.enabled?'status-dot on':'status-dot'}/><b>{reminders.enabled?'Notifications enabled':'Notifications need permission'}</b></div><button className="primary" onClick={enable}>{reminders.enabled?'Refresh permission':'Enable notifications'}</button><div className="reminder-options"><label><span><b>Water</b><small>Every {reminders.waterIntervalMinutes} minutes · 8 AM–10 PM</small></span><input type="checkbox" checked={reminders.water} onChange={e=>update({water:e.target.checked})}/></label><label><span><b>Meals</b><small>At each meal’s scheduled time</small></span><input type="checkbox" checked={reminders.meals} onChange={e=>update({meals:e.target.checked})}/></label><label><span><b>Gym</b><small>Training days · 7:00 PM Eastern</small></span><input type="checkbox" checked={reminders.gym} onChange={e=>update({gym:e.target.checked})}/></label></div></section>
+}
 
 function Settings({store,setStore,toast}:{store:Store;setStore:(s:Store)=>void;toast:(s:string)=>void}){
   const file=useRef<HTMLInputElement>(null);const [weight,setWeight]=useState('');const [waist,setWaist]=useState('');const [fat,setFat]=useState('')

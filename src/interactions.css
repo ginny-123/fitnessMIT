@@ -23,3 +23,16 @@
   .meal-editor { grid-template-columns:25px 48px minmax(0,1fr); }
   .meal-editor > .macro { grid-column:3; text-align:left; }
 }
+.reminder-page { padding-bottom:0; }
+.reminder-page + .page { padding-top:18px; }
+.reminder-panel { max-width:none; }
+.reminder-status { display:flex; align-items:center; gap:9px; margin-top:18px; font-size:12px; }
+.status-dot { width:9px; height:9px; border-radius:50%; background:#c4ccd4; }
+.status-dot.on { background:var(--green); box-shadow:0 0 0 4px #18a95718; }
+.reminder-options { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:22px; }
+.reminder-options label { display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--line); border-radius:12px; padding:13px; }
+.reminder-options b,.reminder-options small { display:block; }
+.reminder-options b { font-size:12px; }
+.reminder-options small { color:var(--muted); font-size:9px; margin-top:3px; }
+.reminder-options input { width:18px; height:18px; accent-color:var(--teal); }
+@media(max-width:650px){ .reminder-options { grid-template-columns:1fr; } }
