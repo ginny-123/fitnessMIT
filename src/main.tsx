@@ -9,6 +9,7 @@ import './gemini.css'
 import './instructions.css'
 import './usage.css'
 import './date-navigation.css'
+import './workout-editor.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><App /></React.StrictMode>,

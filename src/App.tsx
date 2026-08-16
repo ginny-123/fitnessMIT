@@ -5,6 +5,7 @@ import CoachReview from './CoachReview'
 import PlanImporter from './PlanImporter'
 import ActivePlanView from './ActivePlanView'
 import GeminiCoach from './GeminiCoach'
+import WorkoutEditor, { exerciseVideoSearch } from './WorkoutEditor'
 
 type View = 'today'|'workout'|'nutrition'|'progress'|'plan'|'settings'
 const icons: Record<View,string> = {today:'⌂',workout:'◆',nutrition:'●',progress:'↗',plan:'▤',settings:'⚙'}
@@ -29,7 +30,8 @@ function App(){
   useReminders(store)
   useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)}},[toast])
   const selectedDate=new Date(`${date}T12:00:00Z`), day=selectedDate.getUTCDay()
-  const activeWorkouts=(store.activePlan?.workouts||workouts) as Workout[]
+  const baseWorkouts=(store.activePlan?.workouts||workouts) as Workout[]
+  const activeWorkouts=baseWorkouts.map(w=>store.workoutOverrides?.[w.id]||w) as Workout[]
   const activeMealsByDay=(store.activePlan?.mealsByDay||mealsByDay) as Record<number,typeof mealsByDay[0]>
   for(const meal of Object.values(activeMealsByDay).flat())if(!mealLibrary.some(existing=>existing.name===meal.name))mealLibrary.push(meal)
   const activeMealLibrary=Array.from(new Map([...mealLibrary,...Object.values(activeMealsByDay).flat()].map(meal=>[meal.name,meal])).values())
@@ -81,7 +83,7 @@ function App(){
       {view==='workout'&&(displayedWorkout?<WorkoutView key={`${date}-${displayedWorkout.id}`} date={date} workout={displayedWorkout} store={store} setStore={setStore} onDone={()=>{setToast('Workout saved');setView('today');setActiveWorkout(null)}}/>:<NoWorkout date={date} onPrevious={()=>changeDate(shiftDate(date,-1))}/>)}
       {view==='nutrition'&&<Nutrition date={date} meals={meals} completed={completedMeals} onMeal={toggleMeal} onChooseMeal={chooseMeal} consumed={consumed} total={mealTotals} water={nutrition?.water||0} onWater={updateWater}/>} 
       {view==='progress'&&<><Progress store={store}/><div className="page coach-page"><GeminiCoach store={store} activeWorkouts={activeWorkouts}/><CoachReview store={store} activeWorkouts={activeWorkouts}/></div></>} 
-      {view==='plan'&&<><div className="page instructions-page"><UniversalInstructions/></div>{store.activePlan?<ActivePlanView plan={store.activePlan} workouts={activeWorkouts}/>:<Plan/>}<div className="page importer-page"><PlanImporter store={store} setStore={setStore} currentWorkouts={activeWorkouts} toast={setToast}/></div></>} 
+      {view==='plan'&&<><div className="page instructions-page"><UniversalInstructions/></div>{store.activePlan?<ActivePlanView plan={store.activePlan} workouts={activeWorkouts}/>:<Plan/>}<div className="page workout-editor-page"><WorkoutEditor store={store} setStore={setStore} baseWorkouts={baseWorkouts} workouts={activeWorkouts} toast={setToast}/></div><div className="page importer-page"><PlanImporter store={store} setStore={setStore} currentWorkouts={activeWorkouts} toast={setToast}/></div></>} 
       {view==='settings'&&<><div className="page reminder-page"><ReminderPanel store={store} setStore={setStore} toast={setToast}/></div><Settings store={store} setStore={setStore} toast={setToast}/></>} 
     </main>
     <div className="bottom-nav">{(['today','workout','nutrition','progress','plan','settings'] as View[]).map(v=><button key={v} className={view===v?'active':''} onClick={()=>nav(v)}><span>{icons[v]}</span><small>{labels[v]}</small></button>)}</div>
