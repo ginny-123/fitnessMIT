@@ -9,8 +9,15 @@ import GeminiCoach from './GeminiCoach'
 type View = 'today'|'workout'|'nutrition'|'progress'|'plan'|'settings'
 const icons: Record<View,string> = {today:'⌂',workout:'◆',nutrition:'●',progress:'↗',plan:'▤',settings:'⚙'}
 const labels: Record<View,string> = {today:'Today',workout:'Workout',nutrition:'Nutrition',progress:'Progress',plan:'Plan',settings:'Settings'}
-const iso = (d=new Date()) => d.toISOString().slice(0,10)
-const formatDate = (d:string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined,{month:'short',day:'numeric'})
+const EASTERN_TIME_ZONE = 'America/New_York'
+const easternDate = (d=new Date()) => {
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:EASTERN_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d)
+  const get=(type:string)=>parts.find(p=>p.type===type)?.value||''
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
+const iso = easternDate
+const formatDate = (d:string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined,{timeZone:'UTC',month:'short',day:'numeric'})
+const shiftDate=(date:string,days:number)=>{const d=new Date(`${date}T12:00:00Z`);d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
 
 function App(){
   const [view,setView]=useState<View>('today')
@@ -21,7 +28,7 @@ function App(){
   useEffect(()=>saveStore(store),[store])
   useReminders(store)
   useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(''),2400);return()=>clearTimeout(t)}},[toast])
-  const selectedDate=new Date(`${date}T12:00:00`), day=selectedDate.getDay()
+  const selectedDate=new Date(`${date}T12:00:00Z`), day=selectedDate.getUTCDay()
   const activeWorkouts=(store.activePlan?.workouts||workouts) as Workout[]
   const activeMealsByDay=(store.activePlan?.mealsByDay||mealsByDay) as Record<number,typeof mealsByDay[0]>
   for(const meal of Object.values(activeMealsByDay).flat())if(!mealLibrary.some(existing=>existing.name===meal.name))mealLibrary.push(meal)
@@ -60,6 +67,8 @@ function App(){
   })
   const openWorkout=()=>{if(workout){setActiveWorkout(workout);setView('workout')}}
   const nav=(v:View)=>{setView(v);if(v!=='workout')setActiveWorkout(null)}
+  const changeDate=(next:string)=>{setDate(next);setActiveWorkout(null)}
+  const displayedWorkout=activeWorkout||workout
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">FT</span><span><b>FitTrack</b><small>Personal performance</small></span></div>
@@ -67,9 +76,9 @@ function App(){
       <div className="privacy"><b>Private by design</b><small>Your records stay on this device.</small></div>
     </aside>
     <main>
-      <header><div><span className="eyebrow">4-WEEK BUILD · WEEK 1</span><h1>{labels[view]}</h1></div><div className="header-actions"><label className="date-picker"><span>Selected day</span><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><span className="avatar">M</span></div></header>
+      <header><div><span className="eyebrow">4-WEEK BUILD · U.S. EASTERN TIME</span><h1>{labels[view]}</h1></div><div className="header-actions"><div className="date-navigation"><button aria-label="Previous day" onClick={()=>changeDate(shiftDate(date,-1))}>‹</button><label className="date-picker"><span>Workout date · EST/EDT</span><input type="date" value={date} max={easternDate()} onChange={e=>changeDate(e.target.value)}/></label><button className="today-button" onClick={()=>changeDate(easternDate())} disabled={date===easternDate()}>Today</button></div><span className="avatar">M</span></div></header>
       {view==='today'&&<Today date={date} day={day} workout={workout} meals={meals} consumed={consumed} mealTotals={mealTotals} water={nutrition?.water||0} onWorkout={openWorkout} onMeal={toggleMeal} completedMeals={completedMeals} onWater={updateWater}/>} 
-      {view==='workout'&&<WorkoutView date={date} workout={activeWorkout||workout||workouts[0]} store={store} setStore={setStore} onDone={()=>{setToast('Workout saved');setView('today');setActiveWorkout(null)}}/>}
+      {view==='workout'&&(displayedWorkout?<WorkoutView key={`${date}-${displayedWorkout.id}`} date={date} workout={displayedWorkout} store={store} setStore={setStore} onDone={()=>{setToast('Workout saved');setView('today');setActiveWorkout(null)}}/>:<NoWorkout date={date} onPrevious={()=>changeDate(shiftDate(date,-1))}/>)}
       {view==='nutrition'&&<Nutrition date={date} meals={meals} completed={completedMeals} onMeal={toggleMeal} onChooseMeal={chooseMeal} consumed={consumed} total={mealTotals} water={nutrition?.water||0} onWater={updateWater}/>} 
       {view==='progress'&&<><Progress store={store}/><div className="page coach-page"><GeminiCoach store={store} activeWorkouts={activeWorkouts}/><CoachReview store={store} activeWorkouts={activeWorkouts}/></div></>} 
       {view==='plan'&&<><div className="page instructions-page"><UniversalInstructions/></div>{store.activePlan?<ActivePlanView plan={store.activePlan} workouts={activeWorkouts}/>:<Plan/>}<div className="page importer-page"><PlanImporter store={store} setStore={setStore} currentWorkouts={activeWorkouts} toast={setToast}/></div></>} 
@@ -105,6 +114,8 @@ function Metric({label,value,sub,pct,onClick}:{label:string;value:string;sub:str
 
 function UniversalInstructions(){return <details className="universal-instructions" open><summary><span><b>Universal workout instructions</b><small>Warm-up · tempo · RIR · rest · logging</small></span><strong>Review</strong></summary><div className="instruction-grid"><div><span>01</span><p>Warm up with <b>five minutes of easy cardio</b>.</p></div><div><span>02</span><p>For the first major exercise, complete <b>2–3 progressively heavier warm-up sets</b>.</p></div><div><span>03</span><p>Warm-up sets <b>do not count</b> as working sets.</p></div><div><span>04</span><p>Use controlled repetitions: approximately <b>2 seconds lowering</b> and <b>1–2 seconds lifting</b>.</p></div><div><span>05</span><p>Use the full comfortable range of motion.</p></div><div><span>06</span><p>Finish most sets with <b>2 reps in reserve (RIR 2)</b>.</p></div><div><span>07</span><p>Rest <b>2–3 minutes</b> after compound exercises.</p></div><div><span>08</span><p>Rest <b>60–90 seconds</b> after isolation exercises.</p></div><div><span>09</span><p>Do not increase weight merely because one set felt easy.</p></div><div><span>10</span><p>Record every working set separately.</p></div></div></details>}
 
+function NoWorkout({date,onPrevious}:{date:string;onPrevious:()=>void}){return <div className="page"><section className="panel no-workout"><span className="eyebrow">{formatDate(date)} · REST DAY</span><h2>No workout is scheduled for this date.</h2><p className="muted">Use the date control above to open any previous training day and enter or edit its working sets.</p><button className="primary" onClick={onPrevious}>Go to previous day</button></section></div>}
+
 function recommendation(ex:Exercise, history:WorkoutLog[]){
   const past=history.flatMap(w=>w.exercises).filter(e=>e.exerciseId===ex.id)
   const latest=past.at(-1), prior=past.at(-2)
@@ -127,7 +138,7 @@ function WorkoutView({date,workout,store,setStore,onDone}:{date:string;workout:W
   const toggle=(ei:number,si:number,seconds:number)=>{setLogs(ls=>ls.map((e,i)=>i!==ei?e:{...e,sets:e.sets.map((s,j)=>j!==si?s:{...s,done:!s.done})}));setRest(seconds)}
   const completed=logs.reduce((a,e)=>a+e.sets.filter(s=>s.done).length,0), total=logs.reduce((a,e)=>a+e.sets.length,0)
   const finish=()=>{const entry:WorkoutLog={id:`${date}-${workout.id}`,date,workoutId:workout.id,completed:completed===total,exercises:logs,duration:Math.round((Date.now()-started)/60000)};setStore({...store,workouts:[...store.workouts.filter(w=>w.id!==entry.id),entry]});onDone()}
-  return <div className="page workout-page"><section className="workout-banner"><div><span className="eyebrow">{dayNames[workout.day]} · LIVE SESSION</span><h2>{workout.title}</h2><p>{workout.focus}</p></div><div className="session-progress"><b>{completed}/{total}</b><small>sets complete</small></div></section>
+  return <div className="page workout-page">{date!==easternDate()&&<p className="past-session-note">Editing workout for <b>{dayNames[workout.day]}, {formatDate(date)}</b>. Saving will update that day's existing session without creating a duplicate.</p>}<section className="workout-banner"><div><span className="eyebrow">{dayNames[workout.day]} · {existing?'EDIT SESSION':'WORKOUT SESSION'}</span><h2>{workout.title}</h2><p>{workout.focus}</p></div><div className="session-progress"><b>{completed}/{total}</b><small>sets complete</small></div></section>
     <UniversalInstructions/>
     {rest>0&&<div className="rest-timer"><span>Rest timer</span><b>{Math.floor(rest/60)}:{String(rest%60).padStart(2,'0')}</b><button onClick={()=>setRest(0)}>Skip</button></div>}
     <div className="exercise-stack">{workout.exercises.map((ex,ei)=>{const rec=recommendation(ex,store.workouts);return <section className="exercise-card" key={ex.id}><div className="exercise-head"><span className="sequence">{ei+1}</span><div><h3>{ex.name}</h3><p>{ex.sets} × {ex.minReps}–{ex.maxReps} · {ex.rest}s rest · {ex.cue}</p></div><div className="suggested"><small>Suggested</small><b>{rec.weight||'Find'}{rec.weight?' kg':''}</b></div></div><div className="rec-reason">↗ {rec.text}</div><div className="sets-table"><div className="set-row labels"><span>Set</span><span>Weight</span><span>Reps</span><span>RIR</span><span>Done</span></div>{logs[ei].sets.map((s,si)=><div className={`set-row ${s.done?'done':''}`} key={si}><b>{si+1}</b><input aria-label={`${ex.name} set ${si+1} weight`} type="number" value={s.weight} step="0.5" onChange={e=>update(ei,si,'weight',+e.target.value)}/><input aria-label={`${ex.name} set ${si+1} reps`} type="number" value={s.reps} onChange={e=>update(ei,si,'reps',+e.target.value)}/><select aria-label={`${ex.name} set ${si+1} reps in reserve`} value={s.rir} onChange={e=>update(ei,si,'rir',+e.target.value)}><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><button aria-label={`Complete ${ex.name} set ${si+1}`} onClick={()=>toggle(ei,si,ex.rest)}>{s.done?'✓':''}</button></div>)}</div></section>})}</div>

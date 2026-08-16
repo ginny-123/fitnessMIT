@@ -65,7 +65,7 @@ export default async function handler(req, res) {
 
   const models = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.6-flash', 'gemini-3.5-flash-lite'].filter(Boolean))]
   const prompt = action === 'generate-plan'
-    ? `Create the next four-week plan from this aggregate review. Today is ${new Date().toISOString().slice(0, 10)}.\n\n${JSON.stringify(review)}`
+    ? `Create the next four-week plan from this aggregate review. Today in U.S. Eastern time is ${easternPeriod().day}.\n\n${JSON.stringify(review)}`
     : `Question: ${question.trim()}\n\nAggregate FitTrack context:\n${JSON.stringify(review)}`
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 25_000)

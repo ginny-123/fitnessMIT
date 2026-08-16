@@ -1,11 +1,14 @@
 import type { ActivePlan, Store } from './storage'
 import type { Workout } from './data'
 
+const easternDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+const shiftDate=(date:string,days:number)=>{const d=new Date(`${date}T12:00:00Z`);d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
+
 export type ReviewNotes={goals:string;recovery:string;equipment:string;constraints:string;pain:string}
 export function downloadText(name:string,text:string,type:string){const blob=new Blob([text],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
 const mean=(xs:number[])=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null
 export function makeCoachReview(store:Store,activeWorkouts:Workout[],weeks:2|4,notes:ReviewNotes){
-  const end=new Date(),start=new Date();start.setDate(end.getDate()-(weeks*7-1));const from=start.toISOString().slice(0,10),to=end.toISOString().slice(0,10)
+  const to=easternDate(),from=shiftDate(to,-(weeks*7-1))
   const sessions=store.workouts.filter(w=>w.date>=from&&w.date<=to),completed=sessions.filter(w=>w.completed)
   const exerciseMap=new Map(activeWorkouts.flatMap(w=>w.exercises).map(e=>[e.id,e.name]))
   const exerciseResults=[...new Set(sessions.flatMap(s=>s.exercises.map(e=>e.exerciseId)))].map(id=>{const logs=sessions.flatMap(s=>s.exercises.filter(e=>e.exerciseId===id).map(e=>({date:s.date,...e}))).sort((a,b)=>a.date.localeCompare(b.date));const done=logs.flatMap(l=>l.sets.filter(s=>s.done));const latest=logs.at(-1)?.sets.filter(s=>s.done)||[];return {exercise:exerciseMap.get(id)||id,sessions:logs.length,recentWorkingLoad:latest[0]?.weight??null,recentReps:latest.map(s=>s.reps),averageRir:mean(done.map(s=>s.rir)),completedSets:done.length}})
