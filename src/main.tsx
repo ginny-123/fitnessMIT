@@ -10,6 +10,7 @@ import './instructions.css'
 import './usage.css'
 import './date-navigation.css'
 import './workout-editor.css'
+import './video-guide.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><App /></React.StrictMode>,
