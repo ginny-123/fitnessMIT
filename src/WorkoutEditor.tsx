@@ -5,7 +5,7 @@ import type { Store } from './storage'
 const clone=(workout:Workout):Workout=>JSON.parse(JSON.stringify(workout))
 export const exerciseVideoSearch=(site:'youtube'|'tiktok',name:string)=>site==='youtube'
   ?`https://www.youtube.com/results?search_query=${encodeURIComponent(`${name} Planet Fitness proper form shorts`)}`
-  :`https://www.tiktok.com/search/video?q=${encodeURIComponent(`${name} Planet Fitness exercise proper form`)}`
+  :`https://www.google.com/search?q=${encodeURIComponent(`site:tiktok.com ${name} Planet Fitness exercise proper form video`)}`
 const searchUrl=exerciseVideoSearch
 const replacementId=(name:string)=>`${name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,36)||'exercise'}-${Date.now().toString(36)}`
 
