@@ -11,6 +11,7 @@ import './usage.css'
 import './date-navigation.css'
 import './workout-editor.css'
 import './video-guide.css'
+import './last-week.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><App /></React.StrictMode>,

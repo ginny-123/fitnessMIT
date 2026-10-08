@@ -1,4 +1,4 @@
-const CACHE = 'fittrack-v3'
+const CACHE = 'fittrack-v4'
 const SHELL = ['/', '/index.html', '/manifest.webmanifest']
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting())))
 self.addEventListener('activate', event => event.waitUntil(Promise.all([
